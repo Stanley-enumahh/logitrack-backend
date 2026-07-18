@@ -118,6 +118,9 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+# Legacy setting kept for compatibility with django-cloudinary-storage's
+# collectstatic command, which still checks STATICFILES_STORAGE directly
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
