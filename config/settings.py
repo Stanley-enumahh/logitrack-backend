@@ -13,6 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
+import os
+print("DEBUG - DATABASE_URL from os.environ:", repr(os.environ.get('DATABASE_URL')))
+print("DEBUG - all env keys containing 'DATA' or 'MYSQL':", [k for k in os.environ.keys() if 'DATA' in k.upper() or 'MYSQL' in k.upper()])
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
