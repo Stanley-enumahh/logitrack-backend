@@ -114,20 +114,20 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files — served via whitenoise in production
+# Static & media files
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_URL = '/media/'
+
 STORAGES = {
+    'default': {
+        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+    },
     'staticfiles': {
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     },
 }
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
-WHITENOISE_MANIFEST_STRICT = False
-# Legacy setting kept for compatibility with django-cloudinary-storage's
-# collectstatic command, which still checks STATICFILES_STORAGE directly
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -165,10 +165,8 @@ SIMPLE_JWT = {
 }
 
 # Cloudinary — persistent media storage (Railway's disk is ephemeral)
-MEDIA_URL = '/media/'
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME', default=''),
     'API_KEY': env('CLOUDINARY_API_KEY', default=''),
     'API_SECRET': env('CLOUDINARY_API_SECRET', default=''),
 }
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
