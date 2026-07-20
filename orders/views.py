@@ -90,10 +90,7 @@ class AssignDriverView(APIView):
 
 
 class UpdateOrderStatusView(APIView):
-    """
-    Dispatcher or the assigned driver can update status.
-    Enforces valid transitions and writes the audit log entry.
-    """
+   
     permission_classes = [permissions.IsAuthenticated, IsAssignedDriverOrDispatcher]
 
     def post(self, request, pk):
@@ -103,6 +100,12 @@ class UpdateOrderStatusView(APIView):
         serializer = UpdateStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+
+        if data['status'] == Order.Status.DELIVERED:
+            return Response(
+                {'detail': 'Use the proof-of-delivery endpoint to mark an order as delivered.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             transition_order_status(
@@ -117,7 +120,6 @@ class UpdateOrderStatusView(APIView):
             return Response({'detail': str(e)}, status=http_status.HTTP_400_BAD_REQUEST)
 
         return Response(OrderSerializer(order).data)
-
 
 class PublicOrderCreateThrottle(AnonRateThrottle):
     rate = '10/hour'
@@ -168,7 +170,9 @@ class DispatcherOverviewView(APIView):
             active=Count('id', filter=Q(status__in=[
                 Order.Status.ASSIGNED, Order.Status.PICKED_UP, Order.Status.EN_ROUTE
             ])),
+            awaiting_confirmation=Count('id', filter=Q(status=Order.Status.AWAITING_CONFIRMATION)),
             delivered_today=Count('id', filter=Q(status=Order.Status.DELIVERED)),
+            disputed=Count('id', filter=Q(status=Order.Status.DISPUTED)),
             urgent=Count('id', filter=Q(priority=Order.Priority.URGENT) & ~Q(status__in=[
                 Order.Status.DELIVERED, Order.Status.FAILED, Order.Status.CANCELLED
             ])),
@@ -181,4 +185,4 @@ class DispatcherOverviewView(APIView):
         return Response({
             'stats': stats,
             'unassigned_orders': OrderSerializer(unassigned, many=True).data,
-        })        
+        })

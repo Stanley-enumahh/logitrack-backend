@@ -11,20 +11,24 @@ from orders.models import Order
 from orders.permissions import IsAssignedDriverOrDispatcher
 from orders.services import transition_order_status
 from .models import ProofOfDelivery
+
+
 from .serializers import (
     CreateProofOfDeliverySerializer,
     ProofOfDeliverySerializer,
     LocationPingSerializer,
     PublicOrderTrackingSerializer,
     InternalStatusEventSerializer,
+    PublicProofOfDeliverySerializer,
+    ConfirmDeliverySerializer,
 )
 
 from accounts.permissions import IsDriver
-from .serializers import LocationPingSerializer
 
 from rest_framework.permissions import AllowAny
 from orders.models import Order
 
+from django.utils import timezone
 
 class SubmitProofOfDeliveryView(APIView):
     """
@@ -51,18 +55,17 @@ class SubmitProofOfDeliveryView(APIView):
         pod = serializer.save(order=order)
 
         try:
-            transition_order_status(
-                order,
-                new_status=Order.Status.DELIVERED,
-                actor=request.user,
-                latitude=serializer.validated_data.get('latitude'),
-                longitude=serializer.validated_data.get('longitude'),
-                note='Proof of delivery submitted',
-            )
+          transition_order_status(
+        order,
+        new_status=Order.Status.AWAITING_CONFIRMATION,
+        actor=request.user,
+        latitude=serializer.validated_data.get('latitude'),
+        longitude=serializer.validated_data.get('longitude'),
+        note='Proof of delivery submitted, awaiting customer confirmation',
+          )
         except DjangoValidationError as e:
-            # Roll back the POD if the status transition itself isn't valid
-            pod.delete()
-            return Response({'detail': str(e)}, status=http_status.HTTP_400_BAD_REQUEST)
+          pod.delete()
+          return Response({'detail': str(e)}, status=http_status.HTTP_400_BAD_REQUEST)
 
         return Response(ProofOfDeliverySerializer(pod).data, status=http_status.HTTP_201_CREATED)
 
@@ -140,3 +143,58 @@ class OrderStatusEventListView(generics.ListAPIView):
         if user.role == 'driver' and order.assigned_driver_id != user.id:
             self.permission_denied(self.request)
         return order.status_events.all().order_by('timestamp')    
+
+
+class ConfirmDeliveryView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, tracking_token):
+        from orders.models import Order
+        from orders.services import transition_order_status
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        order = generics.get_object_or_404(Order, tracking_token=tracking_token)
+
+        pod = getattr(order, 'proof_of_delivery', None)
+        if not pod:
+            return Response({'detail': 'No delivery to confirm yet.'}, status=400)
+
+        if pod.confirmation_status != ProofOfDelivery.ConfirmationStatus.PENDING:
+            return Response(
+                {'detail': 'This delivery has already been confirmed or disputed.'},
+                status=400,
+            )
+
+        serializer = ConfirmDeliverySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if data['confirmed']:
+            pod.confirmation_status = ProofOfDelivery.ConfirmationStatus.CONFIRMED
+            new_order_status = Order.Status.DELIVERED
+            note = f'Delivery confirmed by {data["confirmed_by_name"]}'
+        else:
+            pod.confirmation_status = ProofOfDelivery.ConfirmationStatus.DISPUTED
+            pod.dispute_reason = data.get('dispute_reason', '')
+            new_order_status = Order.Status.DISPUTED
+            note = f'{data["confirmed_by_name"]}: {data.get("dispute_reason", "")}'
+
+            from notifications.services import notify_dispatchers
+            from notifications.models import Notification
+            notify_dispatchers(
+                Notification.NotificationType.FAILED,
+                title='Delivery disputed',
+                message=f'{order.order_number}: {data["confirmed_by_name"]} reports non-receipt',
+                order=order,
+            )
+
+        pod.confirmed_by_name = data['confirmed_by_name']
+        pod.confirmed_at = timezone.now()
+        pod.save(update_fields=['confirmation_status', 'dispute_reason', 'confirmed_by_name', 'confirmed_at'])
+
+        try:
+            transition_order_status(order, new_order_status, note=note)
+        except DjangoValidationError as e:
+            return Response({'detail': str(e)}, status=400)
+
+        return Response(PublicProofOfDeliverySerializer(pod).data) 

@@ -3,6 +3,8 @@ from .models import ProofOfDelivery
 from .models import LocationPing
 from orders.models import Order
 from .models import OrderStatusEvent, ProofOfDelivery, LocationPing
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 
 
 class ProofOfDeliverySerializer(serializers.ModelSerializer):
@@ -15,10 +17,37 @@ class ProofOfDeliverySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'order', 'captured_at']
 
 
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+
 class CreateProofOfDeliverySerializer(serializers.ModelSerializer):
+    recipient_name = serializers.CharField(required=True, allow_blank=False)
+
     class Meta:
         model = ProofOfDelivery
         fields = ['photo', 'signature', 'recipient_name', 'latitude', 'longitude']
+
+    def _validate_file(self, file_obj, field_name):
+        if file_obj.size > MAX_UPLOAD_SIZE:
+            raise serializers.ValidationError(
+                f"{field_name} must be under 5MB."
+            )
+        content_type = getattr(file_obj, 'content_type', None)
+        if content_type and content_type not in ALLOWED_IMAGE_TYPES:
+            raise serializers.ValidationError(
+                f"{field_name} must be a JPEG, PNG, or WEBP image."
+            )
+
+    def validate_photo(self, value):
+        if value:
+            self._validate_file(value, 'Photo')
+        return value
+
+    def validate_signature(self, value):
+        if value:
+            self._validate_file(value, 'Signature')
+        return value
 
     def validate(self, data):
         if not data.get('photo') and not data.get('signature'):
@@ -51,7 +80,10 @@ class PublicStatusEventSerializer(serializers.ModelSerializer):
 class PublicProofOfDeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = ProofOfDelivery
-        fields = ['photo', 'signature', 'recipient_name', 'captured_at']
+        fields = [
+            'photo', 'signature', 'recipient_name', 'captured_at',
+            'confirmation_status', 'dispute_reason', 'confirmed_by_name', 'confirmed_at',
+        ]
 
 
 class PublicOrderTrackingSerializer(serializers.ModelSerializer):
@@ -94,13 +126,17 @@ class PublicOrderTrackingSerializer(serializers.ModelSerializer):
         }
 
     def get_proof_of_delivery(self, order):
-        if order.status != Order.Status.DELIVERED:
+        visible_statuses = [
+            Order.Status.AWAITING_CONFIRMATION,
+            Order.Status.DELIVERED,
+            Order.Status.DISPUTED,
+    ]
+        if order.status not in visible_statuses:
             return None
         pod = getattr(order, 'proof_of_delivery', None)
         if not pod:
             return None
-        return PublicProofOfDeliverySerializer(pod).data    
-    
+        return PublicProofOfDeliverySerializer(pod).data
 
 
 class InternalStatusEventSerializer(serializers.ModelSerializer):
@@ -118,4 +154,16 @@ class Meta:
         'pickup_address', 'pickup_latitude', 'pickup_longitude',
         'dropoff_address', 'dropoff_latitude', 'dropoff_longitude',
         'created_at', 'timeline', 'driver_location', 'proof_of_delivery',
-    ]          
+    ]   
+    
+class ConfirmDeliverySerializer(serializers.Serializer):
+    confirmed = serializers.BooleanField()
+    confirmed_by_name = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    dispute_reason = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+    def validate(self, data):
+        if not data['confirmed'] and not data.get('dispute_reason'):
+            raise serializers.ValidationError(
+                "Please provide a reason if you didn't receive this delivery."
+            )
+        return data         

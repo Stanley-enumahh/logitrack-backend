@@ -4,18 +4,13 @@ from orders.models import Order
 
 
 class OrderStatusEvent(models.Model):
-    """
-    Immutable audit log — every status change on an order creates a new
-    record here instead of just overwriting Order.status. This is what
-    powers the customer-facing timeline and gives us a verifiable history
-    for dispute resolution.
-    """
+   
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
         related_name='status_events',
     )
-    status = models.CharField(max_length=20, choices=Order.Status.choices)
+    status = models.CharField(max_length=25, choices=Order.Status.choices)
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -37,9 +32,6 @@ class OrderStatusEvent(models.Model):
 
 
 class ProofOfDelivery(models.Model):
-    """
-    One-to-one with Order — captured when status becomes 'delivered'.
-    """
     order = models.OneToOneField(
         Order,
         on_delete=models.CASCADE,
@@ -51,9 +43,26 @@ class ProofOfDelivery(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     captured_at = models.DateTimeField(auto_now_add=True)
+    confirmed_by_name = models.CharField(max_length=150, blank=True)
+
+    # Customer confirmation — closes the loop independently of the driver's claim
+    class ConfirmationStatus(models.TextChoices):
+        PENDING = 'pending', 'Awaiting customer confirmation'
+        CONFIRMED = 'confirmed', 'Confirmed by customer'
+        DISPUTED = 'disputed', 'Disputed by customer'
+
+    confirmation_status = models.CharField(
+        max_length=20,
+        choices=ConfirmationStatus.choices,
+        default=ConfirmationStatus.PENDING,
+    )
+    dispute_reason = models.CharField(max_length=255, blank=True)
+    confirmed_by_name = models.CharField(max_length=150, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"POD for {self.order.order_number}"
+
 
 
 class LocationPing(models.Model):

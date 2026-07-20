@@ -9,7 +9,9 @@ class Order(models.Model):
         ASSIGNED = 'assigned', 'Assigned'
         PICKED_UP = 'picked_up', 'Picked Up'
         EN_ROUTE = 'en_route', 'En Route'
+        AWAITING_CONFIRMATION = 'awaiting_confirmation', 'Awaiting Confirmation'
         DELIVERED = 'delivered', 'Delivered'
+        DISPUTED = 'disputed', 'Disputed'
         FAILED = 'failed', 'Failed'
         CANCELLED = 'cancelled', 'Cancelled'
 
@@ -37,7 +39,7 @@ class Order(models.Model):
     dropoff_longitude = models.DecimalField(max_digits=9, decimal_places=6)
 
     # Status & assignment
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
     priority = models.CharField(max_length=20, choices=Priority.choices, default=Priority.NORMAL)
     assigned_driver = models.ForeignKey(
         settings.AUTH_USER_MODEL,

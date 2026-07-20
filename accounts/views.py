@@ -4,11 +4,15 @@ from .serializers import CustomTokenObtainPairSerializer, CreateDriverSerializer
 from .permissions import IsDispatcher
 from .models import User
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 
+class LoginRateThrottle(AnonRateThrottle):
+    scope = 'login'
+    rate = '5/min' 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-
+    throttle_classes = [LoginRateThrottle]
 
 class CreateDriverView(generics.CreateAPIView):
     """
@@ -47,3 +51,6 @@ class DriverAvailabilityView(APIView):
         available = DriverProfile.objects.filter(is_available=True).count()
         total = DriverProfile.objects.count()
         return Response({'available': available, 'offline': total - available, 'total': total})
+
+
+   

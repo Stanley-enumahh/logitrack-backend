@@ -7,8 +7,10 @@ VALID_TRANSITIONS = {
     Order.Status.PENDING: [Order.Status.ASSIGNED, Order.Status.CANCELLED],
     Order.Status.ASSIGNED: [Order.Status.PICKED_UP, Order.Status.CANCELLED],
     Order.Status.PICKED_UP: [Order.Status.EN_ROUTE, Order.Status.FAILED],
-    Order.Status.EN_ROUTE: [Order.Status.DELIVERED, Order.Status.FAILED],
+    Order.Status.EN_ROUTE: [Order.Status.AWAITING_CONFIRMATION, Order.Status.FAILED],
+    Order.Status.AWAITING_CONFIRMATION: [Order.Status.DELIVERED, Order.Status.DISPUTED],
     Order.Status.DELIVERED: [],
+    Order.Status.DISPUTED: [],
     Order.Status.FAILED: [],
     Order.Status.CANCELLED: [],
 }
