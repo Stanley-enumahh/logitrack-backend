@@ -1,5 +1,6 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
+from .views import SendInviteView, AcceptInviteView
 from .views import CustomTokenObtainPairView, CreateDriverView, MeView, DriverListView, DriverAvailabilityView
 
 urlpatterns = [
@@ -9,4 +10,6 @@ urlpatterns = [
     path('drivers/', DriverListView.as_view(), name='driver_list'),
     path('me/', MeView.as_view(), name='me'),
     path('drivers/availability/', DriverAvailabilityView.as_view(), name='driver_availability'),
+    path('invite/', SendInviteView.as_view(), name='send_invite'),
+    path('accept-invite/', AcceptInviteView.as_view(), name='accept_invite'),
 ]

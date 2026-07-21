@@ -28,10 +28,14 @@ from notifications.services import notify_dispatchers
 from notifications.models import Notification
 
 
+from rest_framework import filters
+
+
 class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['status', 'priority', 'assigned_driver']
+    search_fields = ['customer_name', 'order_number', 'customer_phone']
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -52,7 +56,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
 
-        # Return the full order representation, not just the input fields
         output_serializer = OrderSerializer(order)
         return Response(output_serializer.data, status=http_status.HTTP_201_CREATED)
 

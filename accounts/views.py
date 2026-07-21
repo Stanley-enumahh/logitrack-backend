@@ -5,6 +5,11 @@ from .permissions import IsDispatcher
 from .models import User
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from .models import DispatcherInvite
+from .serializers import SendInviteSerializer, AcceptInviteSerializer
+from .emails import send_invite_email
+from django.utils import timezone
+from .emails import send_verification_email
 
 class LoginRateThrottle(AnonRateThrottle):
     scope = 'login'
@@ -53,4 +58,76 @@ class DriverAvailabilityView(APIView):
         return Response({'available': available, 'offline': total - available, 'total': total})
 
 
-   
+
+class VerifyEmailView(APIView):
+    """
+    Public — activates the account when the emailed token matches.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, token):
+        try:
+            user = User.objects.get(verification_token=token)
+        except User.DoesNotExist:
+            return Response({'detail': 'Invalid or expired verification link.'}, status=400)
+
+        if user.is_verified:
+            return Response({'detail': 'Account already verified.'}, status=400)
+
+        user.is_verified = True
+        user.save(update_fields=['is_verified'])
+
+        return Response({'message': 'Email verified. You can now log in.'})
+
+
+class ResendVerificationView(APIView):
+    """
+    Public — resend the verification email if the user lost it.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        try:
+            user = User.objects.get(email=email, role=User.Role.DISPATCHER)
+        except User.DoesNotExist:
+            # Don't reveal whether the email exists — avoid account enumeration
+            return Response({'message': 'If that account exists, a verification email has been sent.'})
+
+        if user.is_verified:
+            return Response({'message': 'This account is already verified.'})
+
+        user.verification_sent_at = timezone.now()
+        user.save(update_fields=['verification_sent_at'])
+        send_verification_email(user)
+
+        return Response({'message': 'If that account exists, a verification email has been sent.'})   
+    
+
+
+class SendInviteView(APIView):
+    """
+    Dispatcher-only: invite a new dispatcher by email.
+    """
+    permission_classes = [IsDispatcher]
+
+    def post(self, request):
+        serializer = SendInviteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        invite = DispatcherInvite.objects.create(
+            email=serializer.validated_data['email'],
+            invited_by=request.user,
+        )
+        send_invite_email(invite)
+
+        return Response({'message': f"Invite sent to {invite.email}."}, status=201)
+
+
+class AcceptInviteView(generics.CreateAPIView):
+    """
+    Public — no authentication required. Completes signup using
+    a valid, unused invite token.
+    """
+    serializer_class = AcceptInviteSerializer
+    permission_classes = [permissions.AllowAny]    

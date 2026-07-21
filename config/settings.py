@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'django_filters',
+    'anymail',
 
     'accounts',
     'orders',
@@ -171,3 +172,13 @@ CLOUDINARY_STORAGE = {
     'API_KEY': env('CLOUDINARY_API_KEY', default=''),
     'API_SECRET': env('CLOUDINARY_API_SECRET', default=''),
 }
+
+# Email — Resend via django-anymail
+EMAIL_BACKEND = 'anymail.backends.resend.EmailBackend'
+ANYMAIL = {
+    'RESEND_API_KEY': env('RESEND_API_KEY', default=''),
+}
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='onboarding@resend.dev')
+
+# Frontend URL — used to build links inside emails (verification, etc.)
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
